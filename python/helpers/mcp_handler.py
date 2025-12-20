@@ -39,6 +39,7 @@ from anyio.streams.memory import (
 
 from pydantic import BaseModel, Field, Discriminator, Tag, PrivateAttr
 from python.helpers import dirty_json
+from python.helpers import files
 from python.helpers.print_style import PrintStyle
 from python.helpers.tool import Tool, Response
 
@@ -737,14 +738,11 @@ class MCPConfig(BaseModel):
                     prompt += "\n"
 
                     prompt += (
-                        f"#### Usage:\n"
-                        f"{{\n"
-                        # f'    "observations": ["..."],\n' # TODO: this should be a prompt file with placeholders
-                        f'    "thoughts": ["..."],\n'
-                        # f'    "reflection": ["..."],\n' # TODO: this should be a prompt file with placeholders
-                        f"    \"tool_name\": \"{server_name}.{tool['name']}\",\n"
-                        f'    "tool_args": !follow schema above\n'
-                        f"}}\n"
+                        files.read_prompt_file(
+                            "prompts/agent.system.mcp_tool_usage.md",
+                            tool_name=f"{server_name}.{tool['name']}",
+                        )
+                        + "\n"
                     )
 
         return prompt
