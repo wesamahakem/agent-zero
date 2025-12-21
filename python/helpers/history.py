@@ -71,8 +71,8 @@ class Record:
     def output_langchain(self):
         return output_langchain(self.output())
 
-    def output_text(self, human_label="user", ai_label="ai"):
-        return output_text(self.output(), ai_label, human_label)
+    def output_text(self, human_label="user", ai_label="ai", strip_images=False):
+        return output_text(self.output(), ai_label, human_label, strip_images=strip_images)
 
 
 class Message(Record):
@@ -104,8 +104,8 @@ class Message(Record):
     def output_langchain(self):
         return output_langchain(self.output())
 
-    def output_text(self, human_label="user", ai_label="ai"):
-        return output_text(self.output(), ai_label, human_label)
+    def output_text(self, human_label="user", ai_label="ai", strip_images=False):
+        return output_text(self.output(), ai_label, human_label, strip_images=strip_images)
 
     def to_dict(self):
         return {
@@ -216,7 +216,7 @@ class Topic(Record):
 
     async def summarize_messages(self, messages: list[Message]):
         # FIXME: vision bytes are sent to utility LLM, send summary instead
-        msg_txt = [m.output_text() for m in messages]
+        msg_txt = [m.output_text(strip_images=True) for m in messages]
         summary = await self.history.agent.call_utility_model(
             system=self.history.agent.read_prompt("fw.topic_summary.sys.md"),
             message=self.history.agent.read_prompt(
@@ -458,11 +458,11 @@ def _get_ctx_size_for_history() -> int:
     return int(set["chat_model_ctx_length"] * set["chat_model_ctx_history"])
 
 
-def _stringify_output(output: OutputMessage, ai_label="ai", human_label="human"):
-    return f'{ai_label if output["ai"] else human_label}: {_stringify_content(output["content"])}'
+def _stringify_output(output: OutputMessage, ai_label="ai", human_label="human", strip_images=False):
+    return f'{ai_label if output["ai"] else human_label}: {_stringify_content(output["content"], strip_images=strip_images)}'
 
 
-def _stringify_content(content: MessageContent) -> str:
+def _stringify_content(content: MessageContent, strip_images: bool = False) -> str:
     # already a string
     if isinstance(content, str):
         return content
@@ -472,11 +472,32 @@ def _stringify_content(content: MessageContent) -> str:
         preview: str = content.get("preview", "") # type: ignore
         if preview:
             return preview
+
+        # If strip_images is True and we have no preview, return placeholder
+        if strip_images:
+            return "[IMAGE]"
+
         text = _json_dumps(content)
         if len(text) > RAW_MESSAGE_OUTPUT_TEXT_TRIM:
             return text[:RAW_MESSAGE_OUTPUT_TEXT_TRIM] + "... TRIMMED"
         return text
     
+    # Handle list of contents (e.g. multimodal)
+    if isinstance(content, list):
+        if strip_images:
+            parts = []
+            for item in content:
+                if isinstance(item, dict):
+                    if item.get("type") == "image_url" or "image" in item or "image_url" in item:
+                         parts.append("[IMAGE]")
+                    elif item.get("type") == "text":
+                         parts.append(item.get("text", ""))
+                    else:
+                         parts.append(_json_dumps(item))
+                else:
+                    parts.append(_stringify_content(item, strip_images=True))
+            return "".join(parts)
+
     # regular messages of non-string are dumped as json
     return _json_dumps(content)
 
@@ -530,8 +551,8 @@ def output_langchain(messages: list[OutputMessage]):
     return result
 
 
-def output_text(messages: list[OutputMessage], ai_label="ai", human_label="human"):
-    return "\n".join(_stringify_output(o, ai_label, human_label) for o in messages)
+def output_text(messages: list[OutputMessage], ai_label="ai", human_label="human", strip_images=False):
+    return "\n".join(_stringify_output(o, ai_label, human_label, strip_images=strip_images) for o in messages)
 
 
 def _merge_outputs(a: MessageContent, b: MessageContent) -> MessageContent:
