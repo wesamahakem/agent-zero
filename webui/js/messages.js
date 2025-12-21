@@ -13,6 +13,11 @@ const chatHistory = document.getElementById("chat-history");
 let messageGroup = null;
 let currentProcessGroup = null; // Track current process group for collapsible UI
 let currentDelegationSteps = {}; // Track delegation steps by agent number for nesting
+let thoughtKeys = ["thoughts", "reasoning"];
+
+export function updateThoughtKeys(keys) {
+  thoughtKeys = keys;
+}
 
 /**
  * Resolve tool name from kvps, existing attribute, or previous siblings
@@ -791,10 +796,7 @@ function drawKvps(container, kvps, latex) {
     for (let [key, value] of Object.entries(kvps)) {
       const row = table.insertRow();
       row.classList.add("kvps-row");
-      // Skip reasoning
-      if (key === "reasoning") continue;
-      if (key === "thoughts")
-        // TODO: find a better way to determine special class assignment
+      if (thoughtKeys.includes(key))
         row.classList.add("msg-thoughts");
 
       const th = row.insertCell();
@@ -886,7 +888,7 @@ function drawKvpsIncremental(container, kvps, latex) {
 
       // Update row classes
       row.className = "kvps-row";
-      if (key === "thoughts") {
+      if (thoughtKeys.includes(key)) {
         row.classList.add("msg-thoughts");
       }
 

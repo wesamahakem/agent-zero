@@ -94,6 +94,7 @@ class Settings(TypedDict):
     agent_profile: str
     agent_memory_subdir: str
     agent_knowledge_subdir: str
+    ui_thought_keys: list[str]
 
     memory_recall_enabled: bool
     memory_recall_delayed: bool
@@ -507,6 +508,7 @@ def get_default_settings() -> Settings:
         agent_profile=get_default_value("agent_profile", "agent0"),
         agent_memory_subdir=get_default_value("agent_memory_subdir", "default"),
         agent_knowledge_subdir=get_default_value("agent_knowledge_subdir", "custom"),
+        ui_thought_keys=get_default_value("ui_thought_keys", ["thoughts", "reasoning"]),
         rfc_auto_docker=get_default_value("rfc_auto_docker", True),
         rfc_url=get_default_value("rfc_url", "localhost"),
         rfc_password="",
