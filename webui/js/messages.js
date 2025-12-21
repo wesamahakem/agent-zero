@@ -8,6 +8,11 @@ import { addActionButtonsToElement } from "/components/messages/action-buttons/s
 const chatHistory = document.getElementById("chat-history");
 
 let messageGroup = null;
+let thoughtKeys = ["thoughts", "reasoning"];
+
+export function updateThoughtKeys(keys) {
+  thoughtKeys = keys;
+}
 
 // Simplified implementation - no complex interactions needed
 
@@ -695,8 +700,7 @@ function drawKvps(container, kvps, latex) {
     for (let [key, value] of Object.entries(kvps)) {
       const row = table.insertRow();
       row.classList.add("kvps-row");
-      if (key === "thoughts" || key === "reasoning")
-        // TODO: find a better way to determine special class assignment
+      if (thoughtKeys.includes(key))
         row.classList.add("msg-thoughts");
 
       const th = row.insertCell();
@@ -787,7 +791,7 @@ function drawKvpsIncremental(container, kvps, latex) {
 
       // Update row classes
       row.className = "kvps-row";
-      if (key === "thoughts" || key === "reasoning") {
+      if (thoughtKeys.includes(key)) {
         row.classList.add("msg-thoughts");
       }
 
