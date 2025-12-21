@@ -59,6 +59,7 @@ class Settings(TypedDict):
     agent_profile: str
     agent_memory_subdir: str
     agent_knowledge_subdir: str
+    ui_thought_keys: list[str]
 
     memory_recall_enabled: bool
     memory_recall_delayed: bool
@@ -651,6 +652,16 @@ def convert_out(settings: Settings) -> SettingsOutput:
                 {"value": subdir, "label": subdir}
                 for subdir in files.get_subdirectories("knowledge", exclude="default")
             ],
+        }
+    )
+
+    agent_fields.append(
+        {
+            "id": "ui_thought_keys",
+            "title": "Thought keys",
+            "description": "Comma separated list of keys in message output that should be treated as thoughts/reasoning.",
+            "type": "text",
+            "value": ", ".join(settings.get("ui_thought_keys", [])),
         }
     )
 
@@ -1329,6 +1340,10 @@ def convert_in(settings: dict) -> Settings:
                         current[field["id"]] = _env_to_dict(field["value"])
                     elif field["id"].startswith("api_key_"):
                         current["api_keys"][field["id"]] = field["value"]
+                    elif field["id"] == "ui_thought_keys":
+                        # Convert comma-separated string to list
+                        keys = [k.strip() for k in field["value"].split(",") if k.strip()]
+                        current["ui_thought_keys"] = keys
                     else:
                         current[field["id"]] = field["value"]
     return current
@@ -1511,6 +1526,7 @@ def get_default_settings() -> Settings:
         agent_profile="agent0",
         agent_memory_subdir="default",
         agent_knowledge_subdir="custom",
+        ui_thought_keys=["thoughts", "reasoning"],
         rfc_auto_docker=True,
         rfc_url="localhost",
         rfc_password="",
