@@ -88,8 +88,28 @@ class Message(Record):
         return self.tokens
 
     def calculate_tokens(self):
-        text = self.output_text()
-        return tokens.approximate_tokens(text)
+        # Optimized to avoid creating the full string for token estimation
+        outputs = self.output()
+        if not outputs:
+            return 0
+
+        total_len = 0
+        ai_label = "ai"
+        human_label = "user" # output_text uses "user" by default for human_label in Message.output_text
+
+        for i, o in enumerate(outputs):
+            label = ai_label if o["ai"] else human_label
+            # We must use the same logic as _stringify_output -> _stringify_content
+            content_str = _stringify_content(o["content"], strip_images=False)
+
+            # Length of: f'{label}: {content_str}'
+            total_len += len(label) + 2 + len(content_str)
+
+            # Length of join("\n")
+            if i > 0:
+                total_len += 1
+
+        return max(1, int(total_len / tokens.CHARS_PER_TOKEN))
 
     def set_summary(self, summary: str):
         self.summary = summary
