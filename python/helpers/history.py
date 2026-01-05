@@ -109,7 +109,7 @@ class Message(Record):
             if i > 0:
                 total_len += 1
 
-        return max(1, int(total_len / tokens.CHARS_PER_TOKEN))
+        return tokens.approximate_tokens_from_len(total_len)
 
     def set_summary(self, summary: str):
         self.summary = summary
