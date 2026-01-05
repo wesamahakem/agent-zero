@@ -88,7 +88,8 @@ class Message(Record):
         return self.tokens
 
     def calculate_tokens(self):
-        # Optimized to avoid creating the full string for token estimation
+        # Optimized to avoid creating the full string for token estimation.
+        # This implementation must mirror the formatting logic in output_text().
         outputs = self.output()
         if not outputs:
             return 0
