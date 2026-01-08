@@ -88,6 +88,18 @@ class Message(Record):
         return self.tokens
 
     def calculate_tokens(self):
+        # Optimization: for simple string content, approximate tokens using the same "label: content"
+        # format as output_text/_stringify_output without constructing the full output.
+        content_to_measure = self.summary if self.summary else self.content
+
+        if isinstance(content_to_measure, str):
+            label = "ai" if self.ai else "user"
+            # format: label: content
+            length = len(label) + 2 + len(content_to_measure) # 2 for ": "
+            return tokens.approximate_tokens_from_len(length)
+
+        text = self.output_text()
+        return tokens.approximate_tokens(text)
         # Optimized to avoid creating the full string for token estimation.
         # This implementation must mirror the formatting logic in output_text().
         outputs = self.output()
