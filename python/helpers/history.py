@@ -88,23 +88,14 @@ class Message(Record):
         return self.tokens
 
     def calculate_tokens(self):
-        # Optimization: for simple string content, avoid full output construction
-        if isinstance(self.content, str):
-            # output_text uses: f'{ai_label if output["ai"] else human_label}: {content}'
-            # Default labels in output_text method are "ai" and "human" (if called via helper)
-            # OR "ai" and "user" (if called via Message.output_text)
+        # Optimization: for simple string content, approximate tokens using the same "label: content"
+        # format as output_text/_stringify_output without constructing the full output.
+        content_to_measure = self.summary if self.summary else self.content
 
-            # The method output_text below calls the global output_text which defaults to "human" and "ai"
-            # BUT Message.output_text defaults to "user" and "ai"
-
-            # Message.output_text signature: def output_text(self, human_label="user", ai_label="ai", strip_images=False):
-            # It calls global output_text(self.output(), ai_label, human_label, strip_images=strip_images)
-
-            # self.output_text() (no args) -> human_label="user", ai_label="ai"
-
+        if isinstance(content_to_measure, str):
             label = "ai" if self.ai else "user"
             # format: label: content
-            length = len(label) + 2 + len(self.content) # 2 for ": "
+            length = len(label) + 2 + len(content_to_measure) # 2 for ": "
             return tokens.approximate_tokens_from_len(length)
 
         text = self.output_text()
