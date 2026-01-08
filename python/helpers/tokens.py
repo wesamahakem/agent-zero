@@ -34,8 +34,19 @@ def approximate_tokens(
     """
     if not text:
         return 0
+    return approximate_tokens_from_len(len(text))
+
+
+def approximate_tokens_from_len(
+    length: int,
+) -> int:
+    """
+    Approximates the number of tokens based on character length.
+    """
+    if length <= 0:
+        return 0
     # Ensure at least 1 token for non-empty text
-    return max(1, int(len(text) / CHARS_PER_TOKEN))
+    return max(1, int(length / CHARS_PER_TOKEN))
 
 
 def approximate_tokens_from_len(
