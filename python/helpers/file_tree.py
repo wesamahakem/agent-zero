@@ -527,7 +527,7 @@ def _list_directory_children(
                     continue
 
                 # Optimization: Manual path construction instead of os.path.relpath
-                # We assume parent_rel_path is already normalized (forward slashes)
+                # We assume base_rel_path is already normalized (forward slashes)
                 if base_rel_path:
                     rel_posix = f"{base_rel_path}/{entry.name}"
                 else:
