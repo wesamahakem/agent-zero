@@ -123,8 +123,11 @@ def file_tree(
 
     def make_entry(entry: os.DirEntry, parent: _TreeEntry, level: int, item_type: Literal["file", "folder"]) -> _TreeEntry:
         stat = entry.stat(follow_symlinks=False)
-        rel_path = os.path.relpath(entry.path, abs_root)
-        rel_posix = _normalize_relative_path(rel_path)
+        if parent.rel_path:
+            rel_posix = f"{parent.rel_path}/{entry.name}"
+        else:
+            rel_posix = entry.name
+
         return _TreeEntry(
             name=entry.name,
             level=level,
@@ -145,7 +148,7 @@ def file_tree(
         remaining_depth = max_depth - level if max_depth else -1
         folders, files = _list_directory_children(
             current_dir,
-            abs_root,
+            parent_node.rel_path,
             ignore_spec,
             max_depth_remaining=remaining_depth,
             cache=visibility_cache,
@@ -284,7 +287,7 @@ def _normalize_relative_path(path: str) -> str:
 
 def _directory_has_visible_entries(
     directory: str,
-    root_abs_path: str,
+    current_rel_path: str,
     ignore_spec: PathSpec,
     cache: dict[str, bool],
     max_depth_remaining: int,
@@ -299,8 +302,11 @@ def _directory_has_visible_entries(
     try:
         with os.scandir(directory) as iterator:
             for entry in iterator:
-                rel_path = os.path.relpath(entry.path, root_abs_path)
-                rel_posix = _normalize_relative_path(rel_path)
+                if current_rel_path:
+                    rel_posix = f"{current_rel_path}/{entry.name}"
+                else:
+                    rel_posix = entry.name
+
                 is_dir = entry.is_dir(follow_symlinks=False)
 
                 if is_dir:
@@ -311,7 +317,7 @@ def _directory_has_visible_entries(
                             continue
                         if _directory_has_visible_entries(
                             entry.path,
-                            root_abs_path,
+                            rel_posix,
                             ignore_spec,
                             cache,
                             next_depth,
@@ -387,7 +393,7 @@ def _create_folder_unprocessed_comment(
     try:
         folders, files = _list_directory_children(
             folder_path,
-            abs_root,
+            folder_node.rel_path,
             ignore_spec,
             max_depth_remaining=-1,
             cache={},
@@ -497,7 +503,7 @@ def _resolve_ignore_patterns(ignore: str | None, root_abs_path: str) -> Optional
 
 def _list_directory_children(
     directory: str,
-    root_abs_path: str,
+    parent_rel_path: str,
     ignore_spec: Optional[PathSpec],
     *,
     max_depth_remaining: int,
@@ -511,8 +517,12 @@ def _list_directory_children(
             for entry in iterator:
                 if entry.name in (".", ".."):
                     continue
-                rel_path = os.path.relpath(entry.path, root_abs_path)
-                rel_posix = _normalize_relative_path(rel_path)
+
+                if parent_rel_path:
+                    rel_posix = f"{parent_rel_path}/{entry.name}"
+                else:
+                    rel_posix = entry.name
+
                 is_directory = entry.is_dir(follow_symlinks=False)
 
                 if ignore_spec:
@@ -521,7 +531,7 @@ def _list_directory_children(
                         if ignored:
                             if _directory_has_visible_entries(
                                 entry.path,
-                                root_abs_path,
+                                rel_posix,
                                 ignore_spec,
                                 cache,
                                 max_depth_remaining - 1,
