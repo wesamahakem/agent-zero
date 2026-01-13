@@ -513,6 +513,7 @@ def _resolve_ignore_patterns(ignore: str | None, root_abs_path: str) -> Optional
 
 def _list_directory_children(
     directory: str,
+    parent_rel_path: str,
     current_rel_path: str,
     ignore_spec: Optional[PathSpec],
     *,
@@ -529,6 +530,8 @@ def _list_directory_children(
                 if entry.name in (".", ".."):
                     continue
 
+                if parent_rel_path:
+                    rel_posix = f"{parent_rel_path}/{entry.name}"
                 # Optimization: Manual path construction instead of os.path.relpath
                 # We assume base_rel_path is already normalized (forward slashes)
                 if base_rel_path:
