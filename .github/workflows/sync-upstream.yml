@@ -1,0 +1,157 @@
+name: Sync with Upstream Development
+
+on:
+  schedule:
+    # Runs daily at 6:00 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    # Allow manual trigger from GitHub UI
+    inputs:
+      force_pr:
+        description: 'Force create PR even if auto-merge is possible'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  UPSTREAM_REPO: agent0ai/agent-zero
+  UPSTREAM_BRANCH: development
+  TARGET_BRANCH: main
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/${{ env.UPSTREAM_REPO }}.git || true
+          git fetch upstream ${{ env.UPSTREAM_BRANCH }}
+
+      - name: Check for upstream changes
+        id: check_changes
+        run: |
+          # Get the merge base between our branch and upstream
+          MERGE_BASE=$(git merge-base HEAD upstream/${{ env.UPSTREAM_BRANCH }})
+          UPSTREAM_HEAD=$(git rev-parse upstream/${{ env.UPSTREAM_BRANCH }})
+
+          if [ "$MERGE_BASE" = "$UPSTREAM_HEAD" ]; then
+            echo "No new changes from upstream"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            # Count new commits from upstream
+            NEW_COMMITS=$(git rev-list --count $MERGE_BASE..$UPSTREAM_HEAD)
+            echo "Found $NEW_COMMITS new commits from upstream"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "new_commits=$NEW_COMMITS" >> $GITHUB_OUTPUT
+            echo "merge_base=$MERGE_BASE" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Attempt rebase
+        id: rebase
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # Create a temporary branch for the rebase attempt
+          git checkout -b sync-attempt
+
+          # Try to rebase onto upstream
+          if git rebase upstream/${{ env.UPSTREAM_BRANCH }}; then
+            echo "Rebase successful - no conflicts"
+            echo "rebase_success=true" >> $GITHUB_OUTPUT
+            echo "conflict=false" >> $GITHUB_OUTPUT
+          else
+            echo "Rebase has conflicts"
+            git rebase --abort
+            echo "rebase_success=false" >> $GITHUB_OUTPUT
+            echo "conflict=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Auto-merge (no conflicts)
+        if: |
+          steps.check_changes.outputs.has_changes == 'true' &&
+          steps.rebase.outputs.rebase_success == 'true' &&
+          github.event.inputs.force_pr != 'true'
+        run: |
+          # Push the rebased changes directly to main
+          git checkout ${{ env.TARGET_BRANCH }}
+          git reset --hard sync-attempt
+          git push origin ${{ env.TARGET_BRANCH }} --force-with-lease
+          echo "Successfully auto-merged upstream changes!"
+
+      - name: Create sync branch for PR
+        id: create_branch
+        if: |
+          steps.check_changes.outputs.has_changes == 'true' &&
+          (steps.rebase.outputs.conflict == 'true' || github.event.inputs.force_pr == 'true')
+        run: |
+          BRANCH_NAME="sync-upstream-$(date +%Y%m%d-%H%M%S)"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+          # For conflicts, create a merge commit instead
+          git checkout ${{ env.TARGET_BRANCH }}
+          git checkout -b $BRANCH_NAME
+
+          # Try merge (will have conflicts)
+          git merge upstream/${{ env.UPSTREAM_BRANCH }} --no-commit || true
+
+          # Stage all changes (including conflicts for manual resolution)
+          git add -A
+          git commit -m "Sync with upstream ${{ env.UPSTREAM_BRANCH }} (conflicts need resolution)" || true
+
+          git push origin $BRANCH_NAME
+
+      - name: Create Pull Request
+        if: |
+          steps.check_changes.outputs.has_changes == 'true' &&
+          (steps.rebase.outputs.conflict == 'true' || github.event.inputs.force_pr == 'true')
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ steps.create_branch.outputs.branch_name }}
+          base: ${{ env.TARGET_BRANCH }}
+          title: "Sync with upstream ${{ env.UPSTREAM_BRANCH }}"
+          body: |
+            ## Upstream Sync
+
+            This PR syncs changes from `${{ env.UPSTREAM_REPO }}/${{ env.UPSTREAM_BRANCH }}`.
+
+            ### Details
+            - **New commits from upstream**: ${{ steps.check_changes.outputs.new_commits }}
+            - **Conflicts detected**: ${{ steps.rebase.outputs.conflict }}
+
+            ### Action Required
+            ${{ steps.rebase.outputs.conflict == 'true' && '⚠️ **Conflicts detected!** Please resolve conflicts manually before merging.' || '✅ No conflicts - safe to merge.' }}
+
+            ---
+            *This PR was automatically created by the sync workflow.*
+          labels: |
+            upstream-sync
+            automated
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Sync Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.check_changes.outputs.has_changes }}" = "false" ]; then
+            echo "✅ Already up to date with upstream" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.rebase.outputs.rebase_success }}" = "true" ] && [ "${{ github.event.inputs.force_pr }}" != "true" ]; then
+            echo "✅ Auto-merged ${{ steps.check_changes.outputs.new_commits }} commits from upstream" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "📝 Created PR for manual review (conflicts: ${{ steps.rebase.outputs.conflict }})" >> $GITHUB_STEP_SUMMARY
+          fi
