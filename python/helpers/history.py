@@ -98,8 +98,6 @@ class Message(Record):
             length = len(label) + 2 + len(content_to_measure) # 2 for ": "
             return tokens.approximate_tokens_from_len(length)
 
-        text = self.output_text()
-        return tokens.approximate_tokens(text)
         # Optimized to avoid creating the full string for token estimation.
         # This implementation must mirror the formatting logic in output_text().
         outputs = self.output()
