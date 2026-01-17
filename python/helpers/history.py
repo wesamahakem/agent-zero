@@ -17,6 +17,7 @@ HISTORY_BULK_RATIO = 0.2
 TOPIC_COMPRESS_RATIO = 0.65
 LARGE_MESSAGE_TO_TOPIC_RATIO = 0.25
 RAW_MESSAGE_OUTPUT_TEXT_TRIM = 100
+IMAGE_TOKEN_COST = 1000
 
 
 class RawMessage(TypedDict):
@@ -95,32 +96,14 @@ class Message(Record):
         if isinstance(content_to_measure, str):
             label = "ai" if self.ai else "user"
             # format: label: content
-            length = len(label) + 2 + len(content_to_measure) # 2 for ": "
+            length = len(label) + 2 + len(content_to_measure)  # 2 for ": "
             return tokens.approximate_tokens_from_len(length)
 
-        # Optimized to avoid creating the full string for token estimation.
-        # This implementation must mirror the formatting logic in output_text().
-        outputs = self.output()
-        if not outputs:
-            return 0
-
-        total_len = 0
-        ai_label = "ai"
-        human_label = "user" # output_text uses "user" by default for human_label in Message.output_text
-
-        for i, o in enumerate(outputs):
-            label = ai_label if o["ai"] else human_label
-            # We must use the same logic as _stringify_output -> _stringify_content
-            content_str = _stringify_content(o["content"], strip_images=False)
-
-            # Length of: f'{label}: {content_str}'
-            total_len += len(label) + 2 + len(content_str)
-
-            # Length of join("\n")
-            if i > 0:
-                total_len += 1
-
-        return tokens.approximate_tokens_from_len(total_len)
+        # For complex content (multimodal, lists), estimate without full serialization
+        label = "ai" if self.ai else "user"
+        return tokens.approximate_tokens_from_len(len(label) + 2) + estimate_tokens(
+            content_to_measure
+        )
 
     def set_summary(self, summary: str):
         self.summary = summary
@@ -638,3 +621,41 @@ def _json_dumps(obj):
 
 def _json_loads(obj):
     return json.loads(obj)
+
+
+def estimate_tokens(content: MessageContent) -> int:
+    if isinstance(content, str):
+        return tokens.approximate_tokens_from_len(len(content))
+
+    if isinstance(content, list):
+        # Add 1 token per item for delimiters (comma, space)
+        return sum(estimate_tokens(item) for item in content) + len(content)
+
+    if isinstance(content, dict):
+        # Check for image
+        # Fix: Previous implementation counted base64 image strings as text, resulting in
+        # ~333k tokens for a 1MB image. We now use a fixed cost for images.
+        if (
+            content.get("type") == "image_url"
+            or "image" in content
+            or "image_url" in content
+        ):
+            return IMAGE_TOKEN_COST
+
+        if _is_raw_message(content):
+            preview = content.get("preview")
+            if preview:
+                return tokens.approximate_tokens_from_len(len(preview))
+            if "raw_content" in content:
+                return estimate_tokens(content["raw_content"])  # type: ignore
+
+        # General dict
+        total = 0
+        for k, v in content.items():
+            # Add 1 token for key overhead (quotes, colon)
+            total += tokens.approximate_tokens_from_len(len(str(k))) + 1
+            total += estimate_tokens(v)
+        # Add 1 token for braces
+        return total + 1
+
+    return 0
