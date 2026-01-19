@@ -289,10 +289,12 @@ class Bulk(Record):
         return False
 
     async def summarize(self):
+        # Optimization: strip images to save tokens and context window.
+        # The summarizer doesn't need base64 image data.
         self.summary = await self.history.agent.call_utility_model(
             system=self.history.agent.read_prompt("fw.topic_summary.sys.md"),
             message=self.history.agent.read_prompt(
-                "fw.topic_summary.msg.md", content=self.output_text()
+                "fw.topic_summary.msg.md", content=self.output_text(strip_images=True)
             ),
         )
         self.summary_tokens = tokens.approximate_tokens(self.summary)

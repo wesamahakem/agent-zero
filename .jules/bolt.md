@@ -5,3 +5,7 @@
 ## 2025-05-24 - [Image Token Estimation]
 **Learning:** Serializing base64 images to JSON to estimate tokens (by length) is extremely inefficient and incorrect (overestimating by ~400x).
 **Action:** Use a fixed token cost for images (e.g., 1000) and avoid serializing image data during token calculation. Traverse the message structure recursively.
+
+## 2025-05-25 - [Base64 in Summarization]
+**Learning:** `Bulk.summarize` was defaulting to `strip_images=False` when generating text for the summarizer LLM, resulting in massive prompts containing full base64 image data.
+**Action:** Explicitly pass `strip_images=True` to `output_text` when preparing content for summarization or other utility model calls where image data is not needed.
