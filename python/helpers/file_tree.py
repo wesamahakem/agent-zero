@@ -121,16 +121,8 @@ def file_tree(
     limit_reached = False
     visibility_cache: dict[str, bool] = {}
 
-    def make_entry(entry: os.DirEntry, parent: _TreeEntry, level: int, item_type: Literal["file", "folder"]) -> _TreeEntry:
+    def make_entry(entry: os.DirEntry, rel_path: str, parent: _TreeEntry, level: int, item_type: Literal["file", "folder"]) -> _TreeEntry:
         stat = entry.stat(follow_symlinks=False)
-        # Optimization: Use string concatenation instead of os.path.relpath
-        # parent.rel_path is already a normalized relative path (without leading/trailing slashes, using forward slash)
-        # Optimized: use string concatenation instead of os.path.relpath
-        if parent.rel_path:
-            rel_posix = f"{parent.rel_path}/{entry.name}"
-        else:
-            rel_posix = entry.name
-
         return _TreeEntry(
             name=entry.name,
             level=level,
@@ -139,7 +131,7 @@ def file_tree(
             modified=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
             parent=parent,
             items=[] if item_type == "folder" else None,
-            rel_path=rel_posix,
+            rel_path=rel_path,
         )
 
     while queue and not limit_reached:
@@ -155,11 +147,10 @@ def file_tree(
             ignore_spec,
             max_depth_remaining=remaining_depth,
             cache=visibility_cache,
-            base_rel_path=parent_node.rel_path,
         )
 
-        folder_entries = [make_entry(folder, parent_node, level, "folder") for folder in folders]
-        file_entries = [make_entry(file_entry, parent_node, level, "file") for file_entry in files]
+        folder_entries = [make_entry(folder, rel_path, parent_node, level, "folder") for folder, rel_path in folders]
+        file_entries = [make_entry(file_entry, rel_path, parent_node, level, "file") for file_entry, rel_path in files]
 
         children = _apply_sorting_and_limits(
             folder_entries,
@@ -291,11 +282,10 @@ def _normalize_relative_path(path: str) -> str:
 
 def _directory_has_visible_entries(
     directory: str,
-    current_rel_path: str,
+    dir_rel_path: str,
     ignore_spec: PathSpec,
     cache: dict[str, bool],
     max_depth_remaining: int,
-    base_rel_path: str,
 ) -> bool:
     if max_depth_remaining == 0:
         return False
@@ -308,10 +298,8 @@ def _directory_has_visible_entries(
         with os.scandir(directory) as iterator:
             for entry in iterator:
                 # Optimization: Manual path construction
-                if base_rel_path:
-                    rel_posix = f"{base_rel_path}/{entry.name}"
-                if current_rel_path:
-                    rel_posix = f"{current_rel_path}/{entry.name}"
+                if dir_rel_path:
+                    rel_posix = f"{dir_rel_path}/{entry.name}"
                 else:
                     rel_posix = entry.name
 
@@ -329,7 +317,6 @@ def _directory_has_visible_entries(
                             ignore_spec,
                             cache,
                             next_depth,
-                            base_rel_path=rel_posix,
                         ):
                             cache[directory] = True
                             return True
@@ -406,13 +393,12 @@ def _create_folder_unprocessed_comment(
             ignore_spec,
             max_depth_remaining=-1,
             cache={},
-            base_rel_path=folder_node.rel_path,
         )
     except FileNotFoundError:
         return None
 
     hidden_entries: list[_TreeEntry] = []
-    for entry in folders:
+    for entry, rel_path in folders:
         stat = entry.stat(follow_symlinks=False)
         hidden_entries.append(
             _TreeEntry(
@@ -423,10 +409,10 @@ def _create_folder_unprocessed_comment(
                 modified=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
                 parent=folder_node,
                 items=None,
-                rel_path=os.path.join(folder_node.rel_path, entry.name),
+                rel_path=rel_path,
             )
         )
-    for entry in files:
+    for entry, rel_path in files:
         stat = entry.stat(follow_symlinks=False)
         hidden_entries.append(
             _TreeEntry(
@@ -437,7 +423,7 @@ def _create_folder_unprocessed_comment(
                 modified=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
                 parent=folder_node,
                 items=None,
-                rel_path=os.path.join(folder_node.rel_path, entry.name),
+                rel_path=rel_path,
             )
         )
 
@@ -514,15 +500,13 @@ def _resolve_ignore_patterns(ignore: str | None, root_abs_path: str) -> Optional
 def _list_directory_children(
     directory: str,
     parent_rel_path: str,
-    current_rel_path: str,
     ignore_spec: Optional[PathSpec],
     *,
     max_depth_remaining: int,
     cache: dict[str, bool],
-    base_rel_path: str,
-) -> tuple[list[os.DirEntry], list[os.DirEntry]]:
-    folders: list[os.DirEntry] = []
-    files: list[os.DirEntry] = []
+) -> tuple[list[tuple[os.DirEntry, str]], list[tuple[os.DirEntry, str]]]:
+    folders: list[tuple[os.DirEntry, str]] = []
+    files: list[tuple[os.DirEntry, str]] = []
 
     try:
         with os.scandir(directory) as iterator:
@@ -530,14 +514,9 @@ def _list_directory_children(
                 if entry.name in (".", ".."):
                     continue
 
+                # Optimization: Manual path construction
                 if parent_rel_path:
                     rel_posix = f"{parent_rel_path}/{entry.name}"
-                # Optimization: Manual path construction instead of os.path.relpath
-                # We assume base_rel_path is already normalized (forward slashes)
-                if base_rel_path:
-                    rel_posix = f"{base_rel_path}/{entry.name}"
-                if current_rel_path:
-                    rel_posix = f"{current_rel_path}/{entry.name}"
                 else:
                     rel_posix = entry.name
 
@@ -553,18 +532,17 @@ def _list_directory_children(
                                 ignore_spec,
                                 cache,
                                 max_depth_remaining - 1,
-                                base_rel_path=rel_posix,
                             ):
-                                folders.append(entry)
+                                folders.append((entry, rel_posix))
                             continue
                     else:
                         if ignore_spec.match_file(rel_posix):
                             continue
 
                 if is_directory:
-                    folders.append(entry)
+                    folders.append((entry, rel_posix))
                 else:
-                    files.append(entry)
+                    files.append((entry, rel_posix))
     except FileNotFoundError:
         return ([], [])
 
