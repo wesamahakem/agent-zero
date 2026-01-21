@@ -52,11 +52,8 @@ def file_tree(
             or :data:`SORT_DESC`.
         ignore: Inline ``.gitignore`` content or ``file:`` reference. Examples::
 
-                ignore=\"\"\"\\n*.pyc\\n__pycache__/\\n!important.py\\n\"\"\"
-                ignore=\"file:.gitignore\"         # relative to scan root
-                ignore=\"file://.gitignore\"       # URI-style relative path
-                ignore=\"file:/abs/path/.gitignore\"
-                ignore=\"file:///abs/path/.gitignore\"
+                ignore="*.pyc"
+                ignore="file:.gitignore"         # relative to scan root
 
         output_mode: One of :data:`OUTPUT_MODE_STRING`, :data:`OUTPUT_MODE_FLAT`, or
             :data:`OUTPUT_MODE_NESTED`.
@@ -77,8 +74,8 @@ def file_tree(
           :class:`datetime.datetime` objects::
 
                 item = flat_items[0]
-                iso = item[\"created\"].isoformat()
-                epoch = item[\"created\"].timestamp()
+                iso = item["created"].isoformat()
+                epoch = item["created"].timestamp()
 
     """
     abs_root = get_abs_path(relative_path)
@@ -514,7 +511,8 @@ def _list_directory_children(
                 if entry.name in (".", ".."):
                     continue
 
-                # Optimization: Manual path construction
+                # Optimization: Manual path construction instead of os.path.relpath
+                # We assume parent_rel_path is already normalized (forward slashes)
                 if parent_rel_path:
                     rel_posix = f"{parent_rel_path}/{entry.name}"
                 else:
