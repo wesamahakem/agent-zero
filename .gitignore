@@ -48,3 +48,6 @@ agent_history.gif
 
 tmpclaude-*
 .claude/
+
+# Worktrees
+.worktrees/
