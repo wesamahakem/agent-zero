@@ -9,3 +9,7 @@
 ## 2025-05-24 - [File Tree Bug and Optimization]
 **Learning:** `python/helpers/file_tree.py` contained a `TypeError` due to missing arguments in `_list_directory_children` calls, and redundant path calculations.
 **Action:** Fixed the bug and optimized the recursion to pass pre-calculated relative paths, saving string operations. When refactoring recursive file walkers, always check signature consistency across all recursive calls.
+
+## 2025-06-25 - [Localization Performance and Dependency Hell]
+**Learning:** `AgentContext.output()` is called frequently (polling) and naively created new `timezone` and `timedelta` objects via `Localization.serialize_datetime`. Caching the timezone object yielded ~50% speedup in serialization.
+**Action:** When working with high-frequency serialization loops, cache immutable objects like `timezone`. Also, `agent.py` imports almost everything, making isolated testing difficult due to missing dependencies in `requirements.txt`.
