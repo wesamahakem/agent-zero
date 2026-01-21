@@ -9,3 +9,7 @@
 ## 2025-05-24 - [File Tree Bug and Optimization]
 **Learning:** `python/helpers/file_tree.py` contained a `TypeError` due to missing arguments in `_list_directory_children` calls, and redundant path calculations.
 **Action:** Fixed the bug and optimized the recursion to pass pre-calculated relative paths, saving string operations. When refactoring recursive file walkers, always check signature consistency across all recursive calls.
+
+## 2025-05-25 - [Base64 in Summarization]
+**Learning:** `Bulk.summarize` was defaulting to `strip_images=False` when generating text for the summarizer LLM, resulting in massive prompts containing full base64 image data.
+**Action:** Explicitly pass `strip_images=True` to `output_text` when preparing content for summarization or other utility model calls where image data is not needed.
