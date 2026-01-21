@@ -5,3 +5,7 @@
 ## 2025-05-24 - [Image Token Estimation]
 **Learning:** Serializing base64 images to JSON to estimate tokens (by length) is extremely inefficient and incorrect (overestimating by ~400x).
 **Action:** Use a fixed token cost for images (e.g., 1000) and avoid serializing image data during token calculation. Traverse the message structure recursively.
+
+## 2025-05-24 - [File Tree Bug and Optimization]
+**Learning:** `python/helpers/file_tree.py` contained a `TypeError` due to missing arguments in `_list_directory_children` calls, and redundant path calculations.
+**Action:** Fixed the bug and optimized the recursion to pass pre-calculated relative paths, saving string operations. When refactoring recursive file walkers, always check signature consistency across all recursive calls.
