@@ -13,3 +13,7 @@
 ## 2025-05-25 - [Base64 in Summarization]
 **Learning:** `Bulk.summarize` was defaulting to `strip_images=False` when generating text for the summarizer LLM, resulting in massive prompts containing full base64 image data.
 **Action:** Explicitly pass `strip_images=True` to `output_text` when preparing content for summarization or other utility model calls where image data is not needed.
+
+## 2025-06-25 - [Localization Performance and Dependency Hell]
+**Learning:** `AgentContext.output()` is called frequently (polling) and naively created new `timezone` and `timedelta` objects via `Localization.serialize_datetime`. Caching the timezone object yielded ~50% speedup in serialization.
+**Action:** When working with high-frequency serialization loops, cache immutable objects like `timezone`. Also, `agent.py` imports almost everything, making isolated testing difficult due to missing dependencies in `requirements.txt`.
