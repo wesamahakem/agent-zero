@@ -25,6 +25,7 @@ class Localization:
     def __init__(self, timezone: str | None = None):
         self.timezone: str = "UTC"
         self._offset_minutes: int = 0
+        self._cached_tz: dt_timezone | None = None
         self._last_timezone_change: datetime | None = None
         # Load persisted values if available
         persisted_tz = str(get_dotenv_value("DEFAULT_USER_TIMEZONE", "UTC"))
@@ -45,6 +46,9 @@ class Localization:
                 # Compute from timezone and persist
                 self._offset_minutes = self._compute_offset_minutes(self.timezone)
                 save_dotenv_value("DEFAULT_USER_UTC_OFFSET_MINUTES", str(self._offset_minutes))
+
+            # Initialize cache
+            self._cached_tz = dt_timezone(timedelta(minutes=self._offset_minutes))
 
     def get_timezone(self) -> str:
         return self.timezone
@@ -84,6 +88,7 @@ class Localization:
                     f"Changing timezone from {prev_tz} (offset {prev_off}) to {timezone} (offset {new_offset})"
                 )
                 self._offset_minutes = new_offset
+                self._cached_tz = dt_timezone(timedelta(minutes=new_offset))
                 self.timezone = timezone
                 # Persist both the human-readable tz and the numeric offset
                 save_dotenv_value("DEFAULT_USER_TIMEZONE", timezone)
@@ -98,6 +103,7 @@ class Localization:
             PrintStyle.error(f"Unknown timezone: {timezone}, defaulting to UTC")
             self.timezone = "UTC"
             self._offset_minutes = 0
+            self._cached_tz = dt_timezone.utc
             # save defaults to avoid future errors on startup
             save_dotenv_value("DEFAULT_USER_TIMEZONE", "UTC")
             save_dotenv_value("DEFAULT_USER_UTC_OFFSET_MINUTES", "0")
@@ -119,14 +125,14 @@ class Localization:
                 if local_datetime_obj.tzinfo is None:
                     # If no timezone info, assume fixed offset
                     local_datetime_obj = local_datetime_obj.replace(
-                        tzinfo=dt_timezone(timedelta(minutes=self._offset_minutes))
+                        tzinfo=self._cached_tz or dt_timezone(timedelta(minutes=self._offset_minutes))
                     )
             except ValueError:
                 # If timezone parsing fails, try without timezone
                 base = localtime_str.split('Z')[0].split('+')[0]
                 local_datetime_obj = datetime.fromisoformat(base)
                 local_datetime_obj = local_datetime_obj.replace(
-                    tzinfo=dt_timezone(timedelta(minutes=self._offset_minutes))
+                    tzinfo=self._cached_tz or dt_timezone(timedelta(minutes=self._offset_minutes))
                 )
 
             # Convert to UTC
@@ -154,7 +160,7 @@ class Localization:
                 utc_dt = utc_dt.astimezone(dt_timezone.utc)
 
             # Convert to local time using fixed offset
-            local_tz = dt_timezone(timedelta(minutes=self._offset_minutes))
+            local_tz = self._cached_tz or dt_timezone(timedelta(minutes=self._offset_minutes))
             local_datetime_obj = utc_dt.astimezone(local_tz)
             return local_datetime_obj.isoformat(sep=sep, timespec=timespec)
         except Exception as e:
@@ -177,7 +183,7 @@ class Localization:
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=dt_timezone.utc)
 
-            local_tz = dt_timezone(timedelta(minutes=self._offset_minutes))
+            local_tz = self._cached_tz or dt_timezone(timedelta(minutes=self._offset_minutes))
             local_dt = dt.astimezone(local_tz)
             return local_dt.isoformat()
         except Exception as e:

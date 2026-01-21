@@ -35,6 +35,8 @@ from python.helpers.localization import Localization
 from python.helpers.extension import call_extensions
 from python.helpers.errors import RepairableException
 
+EPOCH = datetime.fromtimestamp(0, timezone.utc)
+
 
 class AgentContextType(Enum):
     USER = "user"
@@ -174,7 +176,7 @@ class AgentContext:
             "created_at": (
                 Localization.get().serialize_datetime(self.created_at)
                 if self.created_at
-                else Localization.get().serialize_datetime(datetime.fromtimestamp(0))
+                else Localization.get().serialize_datetime(EPOCH)
             ),
             "no": self.no,
             "log_guid": self.log.guid,
@@ -184,7 +186,7 @@ class AgentContext:
             "last_message": (
                 Localization.get().serialize_datetime(self.last_message)
                 if self.last_message
-                else Localization.get().serialize_datetime(datetime.fromtimestamp(0))
+                else Localization.get().serialize_datetime(EPOCH)
             ),
             "type": self.type.value,
             **self.output_data,
