@@ -1,9 +1,8 @@
 from typing import Literal
-import tiktoken
 
 # Heuristic: ~3 characters per token is a safe approximation (usually ~4 for English/Code)
 # This avoids expensive BPE encoding for simple checks
-CHARS_PER_TOKEN = 3.0
+CHARS_PER_TOKEN = 3
 TRIM_BUFFER = 0.8
 
 
@@ -14,6 +13,8 @@ def count_tokens(text: str, encoding_name="cl100k_base") -> int:
     """
     if not text:
         return 0
+
+    import tiktoken
 
     # Get the encoding
     encoding = tiktoken.get_encoding(encoding_name)
@@ -46,7 +47,7 @@ def approximate_tokens_from_len(
     if length <= 0:
         return 0
     # Ensure at least 1 token for non-empty text
-    return max(1, int(length / CHARS_PER_TOKEN))
+    return max(1, length // CHARS_PER_TOKEN)
 
 
 def trim_to_tokens(
