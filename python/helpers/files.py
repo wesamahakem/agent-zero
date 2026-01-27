@@ -567,26 +567,22 @@ def read_text_files_in_dir(
     if not os.path.exists(abs_path):
         return {}
     result = {}
-    try:
-        with os.scandir(abs_path) as it:
-            for entry in it:
-                try:
-                    if not entry.is_file():
-                        continue
-                    if not fnmatch(entry.name, pattern):
-                        continue
-                    if max_size > 0 and entry.stat().st_size > max_size:
-                        continue
-                    mime, _ = mimetypes.guess_type(entry.name)
-                    if mime is not None and not mime.startswith("text"):
-                        continue
-                    # Check if file is binary by reading a small chunk
-                    content = read_file(entry.path)
-                    result[entry.name] = content
-                except Exception:
-                    continue
-    except OSError:
-        pass
+    for file_path in [os.path.join(abs_path, f) for f in os.listdir(abs_path)]:
+        try:
+            if not os.path.isfile(file_path):
+                continue
+            if not fnmatch(os.path.basename(file_path), pattern):
+                continue
+            if max_size > 0 and os.path.getsize(file_path) > max_size:
+                continue
+            mime, _ = mimetypes.guess_type(file_path)
+            if mime is not None and not mime.startswith("text"):
+                continue
+            # Check if file is binary by reading a small chunk
+            content = read_file(file_path)
+            result[os.path.basename(file_path)] = content
+        except Exception:
+            continue
     return result
 
 def list_files_in_dir_recursively(relative_path: str) -> list[str]:
