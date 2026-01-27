@@ -181,16 +181,22 @@ class Topic(Record):
             * CURRENT_TOPIC_RATIO
             * LARGE_MESSAGE_TO_TOPIC_RATIO
         )
-        large_msgs = []
+
+        # Optimization: Identify candidates first without serialization to avoid expensive overhead
+        candidates = []
         for m in (m for m in self.messages if not m.summary):
             tok = m.get_tokens()
             if tok > msg_max_size:
-                out = m.output()
-                text = output_text(out, strip_images=True)
-                leng = len(text)
-                large_msgs.append((m, tok, leng, out))
-        large_msgs.sort(key=lambda x: x[1], reverse=True)
-        for msg, tok, leng, out in large_msgs:
+                candidates.append((m, tok))
+
+        candidates.sort(key=lambda x: x[1], reverse=True)
+
+        for msg, tok in candidates:
+            out = msg.output()
+            # Optimization: strip images to avoid serializing large base64 data when calculating text length
+            text = output_text(out, strip_images=True)
+            leng = len(text)
+
             trim_to_chars = leng * (msg_max_size / tok)
             # raw messages will be replaced as a whole, they would become invalid when truncated
             if _is_raw_message(out[0]["content"]):
@@ -517,6 +523,7 @@ def _stringify_content(content: MessageContent, strip_images: bool = False) -> s
                 parts.append(_stringify_content(item, strip_images=True))
             return "".join(parts)
 
+    # Handle dict-based content with strip_images (e.g. single image dict)
     if isinstance(content, dict) and strip_images:
         if content.get("type") == "image_url" or "image" in content or "image_url" in content:
             return "[IMAGE]"
