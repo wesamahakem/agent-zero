@@ -186,7 +186,7 @@ class Topic(Record):
             tok = m.get_tokens()
             if tok > msg_max_size:
                 out = m.output()
-                text = output_text(out)
+                text = output_text(out, strip_images=True)
                 leng = len(text)
                 large_msgs.append((m, tok, leng, out))
         large_msgs.sort(key=lambda x: x[1], reverse=True)
@@ -514,16 +514,14 @@ def _stringify_content(content: MessageContent, strip_images: bool = False) -> s
         if strip_images:
             parts = []
             for item in content:
-                if isinstance(item, dict):
-                    if item.get("type") == "image_url" or "image" in item or "image_url" in item:
-                         parts.append("[IMAGE]")
-                    elif item.get("type") == "text":
-                         parts.append(item.get("text", ""))
-                    else:
-                         parts.append(_json_dumps(item))
-                else:
-                    parts.append(_stringify_content(item, strip_images=True))
+                parts.append(_stringify_content(item, strip_images=True))
             return "".join(parts)
+
+    if isinstance(content, dict) and strip_images:
+        if content.get("type") == "image_url" or "image" in content or "image_url" in content:
+            return "[IMAGE]"
+        if content.get("type") == "text":
+            return content.get("text", "")
 
     # regular messages of non-string are dumped as json
     return _json_dumps(content)
