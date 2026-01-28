@@ -1,6 +1,5 @@
 """Unit tests for the merge conflict audit script."""
 
-import json
 import sys
 import unittest
 from pathlib import Path
