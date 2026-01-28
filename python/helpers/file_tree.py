@@ -30,7 +30,10 @@ def file_tree(
     folders_first: bool = True,
     max_folders: int = 0,
     max_files: int = 0,
-    sort: tuple[Literal["name", "created", "modified"], Literal["asc", "desc"]] = ("modified", "desc"),
+    sort: tuple[Literal["name", "created", "modified"], Literal["asc", "desc"]] = (
+        "modified",
+        "desc",
+    ),
     ignore: str | None = None,
     output_mode: Literal["string", "flat", "nested"] = OUTPUT_MODE_STRING,
 ) -> str | list[dict]:
@@ -99,14 +102,23 @@ def file_tree(
 
     ignore_spec = _resolve_ignore_patterns(ignore, abs_root)
 
+    need_created = output_mode != OUTPUT_MODE_STRING or sort_key == SORT_BY_CREATED
+    need_modified = output_mode != OUTPUT_MODE_STRING or sort_key == SORT_BY_MODIFIED
+
     root_stat = os.stat(abs_root, follow_symlinks=False)
-    root_name = os.path.basename(os.path.normpath(abs_root)) or os.path.basename(abs_root)
+    root_name = os.path.basename(os.path.normpath(abs_root)) or os.path.basename(
+        abs_root
+    )
     root_node = _TreeEntry(
         name=root_name,
         level=0,
         item_type="folder",
-        created=datetime.fromtimestamp(root_stat.st_ctime, tz=timezone.utc),
-        modified=datetime.fromtimestamp(root_stat.st_mtime, tz=timezone.utc),
+        created=datetime.fromtimestamp(root_stat.st_ctime, tz=timezone.utc)
+        if need_created
+        else None,
+        modified=datetime.fromtimestamp(root_stat.st_mtime, tz=timezone.utc)
+        if need_modified
+        else None,
         parent=None,
         items=[],
         rel_path="",
@@ -118,14 +130,24 @@ def file_tree(
     limit_reached = False
     visibility_cache: dict[str, bool] = {}
 
-    def make_entry(entry: os.DirEntry, rel_path: str, parent: _TreeEntry, level: int, item_type: Literal["file", "folder"]) -> _TreeEntry:
+    def make_entry(
+        entry: os.DirEntry,
+        rel_path: str,
+        parent: _TreeEntry,
+        level: int,
+        item_type: Literal["file", "folder"],
+    ) -> _TreeEntry:
         stat = entry.stat(follow_symlinks=False)
         return _TreeEntry(
             name=entry.name,
             level=level,
             item_type=item_type,
-            created=datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc),
-            modified=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+            created=datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc)
+            if need_created
+            else None,
+            modified=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+            if need_modified
+            else None,
             parent=parent,
             items=[] if item_type == "folder" else None,
             rel_path=rel_path,
@@ -146,8 +168,14 @@ def file_tree(
             cache=visibility_cache,
         )
 
-        folder_entries = [make_entry(folder, rel_path, parent_node, level, "folder") for folder, rel_path in folders]
-        file_entries = [make_entry(file_entry, rel_path, parent_node, level, "file") for file_entry, rel_path in files]
+        folder_entries = [
+            make_entry(folder, rel_path, parent_node, level, "folder")
+            for folder, rel_path in folders
+        ]
+        file_entries = [
+            make_entry(file_entry, rel_path, parent_node, level, "file")
+            for file_entry, rel_path in files
+        ]
 
         children = _apply_sorting_and_limits(
             folder_entries,
@@ -248,8 +276,8 @@ class _TreeEntry:
     name: str
     level: int
     item_type: Literal["file", "folder", "comment"]
-    created: datetime
-    modified: datetime
+    created: Optional[datetime]
+    modified: Optional[datetime]
     parent: Optional["_TreeEntry"] = None
     items: Optional[list["_TreeEntry"]] = None
     is_last: bool = False
@@ -264,7 +292,9 @@ class _TreeEntry:
             "created": self.created,
             "modified": self.modified,
             "text": self.text,
-            "items": [child.as_dict() for child in self.items] if self.items is not None else None,
+            "items": [child.as_dict() for child in self.items]
+            if self.items is not None
+            else None,
         }
 
 
@@ -303,9 +333,13 @@ def _directory_has_visible_entries(
                 is_dir = entry.is_dir(follow_symlinks=False)
 
                 if is_dir:
-                    ignored = ignore_spec.match_file(rel_posix) or ignore_spec.match_file(f"{rel_posix}/")
+                    ignored = ignore_spec.match_file(rel_posix) or ignore_spec.match_file(
+                        f"{rel_posix}/"
+                    )
                     if ignored:
-                        next_depth = max_depth_remaining - 1 if max_depth_remaining > 0 else -1
+                        next_depth = (
+                            max_depth_remaining - 1 if max_depth_remaining > 0 else -1
+                        )
                         if next_depth == 0:
                             continue
                         if _directory_has_visible_entries(
@@ -350,7 +384,9 @@ def _create_summary_comment(parent: _TreeEntry, noun: str, count: int) -> _TreeE
     )
 
 
-def _create_global_limit_comment(parent: _TreeEntry, hidden_children: Sequence[_TreeEntry]) -> _TreeEntry:
+def _create_global_limit_comment(
+    parent: _TreeEntry, hidden_children: Sequence[_TreeEntry]
+) -> _TreeEntry:
     folders = sum(1 for child in hidden_children if child.item_type == "folder")
     files = sum(1 for child in hidden_children if child.item_type == "file")
     parts: list[str] = []
@@ -458,7 +494,9 @@ def _refresh_render_metadata(node: _TreeEntry) -> None:
         _refresh_render_metadata(child)
 
 
-def _resolve_ignore_patterns(ignore: str | None, root_abs_path: str) -> Optional[PathSpec]:
+def _resolve_ignore_patterns(
+    ignore: str | None, root_abs_path: str
+) -> Optional[PathSpec]:
     if ignore is None:
         return None
 
@@ -522,7 +560,9 @@ def _list_directory_children(
 
                 if ignore_spec:
                     if is_directory:
-                        ignored = ignore_spec.match_file(rel_posix) or ignore_spec.match_file(f"{rel_posix}/")
+                        ignored = ignore_spec.match_file(
+                            rel_posix
+                        ) or ignore_spec.match_file(f"{rel_posix}/")
                         if ignored:
                             if _directory_has_visible_entries(
                                 entry.path,
