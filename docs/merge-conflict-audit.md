@@ -264,10 +264,13 @@ jobs:
           name: merge-audit-report
           path: merge-audit-report.html
 
-      - name: Comment on Findings (optional)
-        if: failure()
+      - name: Check for Findings and Comment (optional)
         run: |
-          echo "Merge conflict audit detected issues. Review the report artifact."
+          # Run with fail-on-findings to detect issues
+          if ! python scripts/audit-merge-conflicts.py --limit 20 --fail-on-findings > /dev/null 2>&1; then
+            echo "Merge conflict audit detected issues. Review the report artifact."
+            exit 1
+          fi
 ```
 
 ## Examples
@@ -336,8 +339,10 @@ cat findings.json | jq '.commits[].files[].findings[] | .severity' | sort | uniq
 
 1. **False Positives**: The tool may flag legitimate code patterns that happen to match the heuristics
 2. **Language Support**: Pattern detection works best for Python, JavaScript/TypeScript, Java, Go, and Rust
+   - Note: Java method detection may not catch all methods with complex return types (generics, arrays, fully-qualified types)
 3. **Context Awareness**: The tool analyzes diffs without full semantic understanding of the code
 4. **Intentional Duplicates**: Some patterns (like repeated logging statements) may be intentional
+5. **Conflict Marker Detection**: Only detects markers at the start of lines to reduce false positives
 
 ### What the Tool Cannot Detect
 

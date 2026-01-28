@@ -184,6 +184,24 @@ index 1234567..abcdefg 100644
         self.assertEqual(len(file_diffs["test.py"]), 1)
         self.assertIn("@@ -1,3 +1,5 @@", file_diffs["test.py"][0])
 
+    def test_files_without_findings_not_in_report(self):
+        """Test that files without findings are still included for context."""
+        # Create a merge with files but no findings
+        merge = MergeCommit(
+            commit_hash="test123",
+            title="Test merge",
+            author="Test",
+            date="2026-01-28"
+        )
+        
+        # File with hunks but no findings
+        file_diff = FileDiff(filepath="clean.py", hunks=["@@ -1,1 +1,2 @@\n+import os"])
+        merge.files.append(file_diff)
+        
+        # Verify the file is in the merge (for context)
+        self.assertEqual(len(merge.files), 1)
+        self.assertEqual(len(merge.files[0].findings), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -258,8 +258,10 @@ class MergeConflictAuditor:
         markers = ['<<<<<<<', '=======', '>>>>>>>']
 
         for line_num, content in added_lines:
+            stripped = content.strip()
             for marker in markers:
-                if marker in content:
+                # Check if line starts with marker to reduce false positives
+                if stripped.startswith(marker):
                     findings.append(Finding(
                         type="conflict_marker",
                         line_number=line_num,
@@ -316,33 +318,41 @@ class MergeConflictAuditor:
         i = 0
         while i < len(added_lines) - 2:
             line1_num, line1 = added_lines[i]
-            line2_num, line2 = added_lines[i + 1]
-            line3_num, line3 = added_lines[i + 2]
-
+            
             # Skip blank lines
-            if not line1.strip() or not line2.strip():
+            if not line1.strip():
                 i += 1
                 continue
 
             # Check if we have repeating pattern
-            if line1.strip() == line2.strip() and line1.strip():
-                # Count consecutive duplicates
-                count = 2
-                j = i + 2
-                while j < len(added_lines) and added_lines[j][1].strip() == line1.strip():
+            line1_stripped = line1.strip()
+            
+            # Count consecutive duplicates
+            count = 1
+            j = i + 1
+            while j < len(added_lines):
+                line_j_stripped = added_lines[j][1].strip()
+                # Skip blank lines in the check
+                if not line_j_stripped:
+                    j += 1
+                    continue
+                # Check if it matches the pattern
+                if line_j_stripped == line1_stripped:
                     count += 1
                     j += 1
+                else:
+                    break
 
-                if count >= 3:
-                    findings.append(Finding(
-                        type="duplicate_block",
-                        line_number=line1_num,
-                        content=line1.strip(),
-                        severity="medium",
-                        description=f"Line repeated {count} times consecutively"
-                    ))
-                    i = j
-                    continue
+            if count >= 3:
+                findings.append(Finding(
+                    type="duplicate_block",
+                    line_number=line1_num,
+                    content=line1_stripped,
+                    severity="medium",
+                    description=f"Line repeated {count} times consecutively"
+                ))
+                i = j
+                continue
 
             i += 1
 
@@ -410,7 +420,9 @@ class MergeConflictAuditor:
                 findings = self.analyze_hunk(hunk, filepath)
                 file_diff.findings.extend(findings)
 
-            if file_diff.hunks:  # Only add files that have hunks
+            # Only add files that have hunks (even if no findings detected)
+            # Files without findings can still be useful for context in the report
+            if file_diff.hunks:
                 merge.files.append(file_diff)
 
         return merge
