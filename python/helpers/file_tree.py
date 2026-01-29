@@ -486,12 +486,22 @@ def _mark_last_flags(node: _TreeEntry) -> None:
         _mark_last_flags(child)
 
 
-def _refresh_render_metadata(node: _TreeEntry) -> None:
+def _refresh_render_metadata(node: _TreeEntry, prefix: str = "") -> None:
     if node.items is None:
         return
     for child in node.items:
-        child.text = _format_line(child)
-        _refresh_render_metadata(child)
+        connector = "└── " if child.is_last else "├── "
+        if child.item_type == "folder":
+            label = f"{child.name}/"
+        elif child.item_type == "comment":
+            label = f"# {child.name}"
+        else:
+            label = child.name
+
+        child.text = f"{prefix}{connector}{label}"
+
+        extension = "    " if child.is_last else "│   "
+        _refresh_render_metadata(child, prefix + extension)
 
 
 def _resolve_ignore_patterns(
@@ -644,25 +654,6 @@ def _apply_sorting_and_limits(
         append_group(folders_sorted, max_folders, "folder")
 
     return combined
-
-
-def _format_line(node: _TreeEntry) -> str:
-    segments: list[str] = []
-    ancestor = node.parent
-    while ancestor and ancestor.parent is not None:
-        segments.append("    " if ancestor.is_last else "│   ")
-        ancestor = ancestor.parent
-    segments.reverse()
-
-    connector = "└── " if node.is_last else "├── "
-    if node.item_type == "folder":
-        label = f"{node.name}/"
-    elif node.item_type == "comment":
-        label = f"# {node.name}"
-    else:
-        label = node.name
-
-    return "".join(segments) + connector + label
 
 
 def _build_tree_items_flat(items: Sequence[_TreeEntry]) -> list[dict]:
