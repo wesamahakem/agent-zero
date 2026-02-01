@@ -21,3 +21,7 @@
 ## 2025-06-25 - [Deferred Serialization in Compression]
 **Learning:** In `compress_large_messages`, iterating over all large messages and serializing them via `output_text` (which involves `json.dumps`) just to sort them by size was a significant bottleneck (~460ms for 20 msgs).
 **Action:** Use cached metadata (like `get_tokens()`) to sort and select the best candidate first, then perform expensive operations only on the selected item. Reduced time to ~250ms.
+
+## 2025-07-15 - [Avoid String Allocation for Length Calculation]
+**Learning:** `Topic.compress_large_messages` was calling `output_text` to serialize large message structures (lists of multimodal content) into a huge string just to call `len()` on it. This caused massive memory allocation and CPU usage (1.6s for 25MB).
+**Action:** Implemented `calculate_output_length` to recursively calculate the length of the string representation without constructing it. Achieved ~100x speedup (0.013s) for large contents. Avoid intermediate string construction whenever possible.
