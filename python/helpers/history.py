@@ -194,8 +194,7 @@ class Topic(Record):
         for msg, tok in candidates:
             out = msg.output()
             # Optimization: strip images to avoid serializing large base64 data when calculating text length
-            text = output_text(out, strip_images=True)
-            leng = len(text)
+            leng = calculate_output_length(out, strip_images=True)
 
             trim_to_chars = leng * (msg_max_size / tok)
             # raw messages will be replaced as a whole, they would become invalid when truncated
@@ -585,6 +584,51 @@ def output_langchain(messages: list[OutputMessage]):
 
 def output_text(messages: list[OutputMessage], ai_label="ai", human_label="human", strip_images=False):
     return "\n".join(_stringify_output(o, ai_label, human_label, strip_images=strip_images) for o in messages)
+
+
+def calculate_output_length(messages: list[OutputMessage], ai_label="ai", human_label="human", strip_images=False) -> int:
+    length = 0
+    if not messages:
+        return 0
+
+    for i, o in enumerate(messages):
+        label = ai_label if o["ai"] else human_label
+        length += len(label) + 2 # for ": "
+        length += _calculate_content_length(o["content"], strip_images=strip_images)
+
+    # Add newlines for join (one less than count)
+    length += len(messages) - 1
+    return length
+
+
+def _calculate_content_length(content: MessageContent, strip_images: bool = False) -> int:
+    if isinstance(content, str):
+        return len(content)
+
+    if _is_raw_message(content):
+        preview: str = content.get("preview", "") # type: ignore
+        if preview:
+            return len(preview)
+
+        if strip_images:
+            return len("[IMAGE]")
+
+        text = _json_dumps(content)
+        if len(text) > RAW_MESSAGE_OUTPUT_TEXT_TRIM:
+            return RAW_MESSAGE_OUTPUT_TEXT_TRIM + 11 # len("... TRIMMED")
+        return len(text)
+
+    if isinstance(content, list):
+        if strip_images:
+            return sum(_calculate_content_length(item, strip_images=True) for item in content)
+
+    if isinstance(content, dict) and strip_images:
+        if content.get("type") == "image_url" or "image" in content or "image_url" in content:
+            return len("[IMAGE]")
+        if content.get("type") == "text":
+            return len(content.get("text", "") or "")
+
+    return len(_json_dumps(content))
 
 
 def _merge_outputs(a: MessageContent, b: MessageContent) -> MessageContent:
