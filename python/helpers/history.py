@@ -194,8 +194,7 @@ class Topic(Record):
         for msg, tok in candidates:
             out = msg.output()
             # Optimization: strip images to avoid serializing large base64 data when calculating text length
-            text = output_text(out, strip_images=True)
-            leng = len(text)
+            leng = calculate_output_length(out, strip_images=True)
 
             trim_to_chars = leng * (msg_max_size / tok)
             # raw messages will be replaced as a whole, they would become invalid when truncated
@@ -585,6 +584,62 @@ def output_langchain(messages: list[OutputMessage]):
 
 def output_text(messages: list[OutputMessage], ai_label="ai", human_label="human", strip_images=False):
     return "\n".join(_stringify_output(o, ai_label, human_label, strip_images=strip_images) for o in messages)
+
+
+def calculate_output_length(messages: list[OutputMessage], ai_label="ai", human_label="human", strip_images=False) -> int:
+    if not messages:
+        return 0
+
+    total_len = 0
+    # Add length of separators (\n)
+    total_len += len(messages) - 1
+
+    for o in messages:
+        # _stringify_output: f'{ai_label if output["ai"] else human_label}: {_stringify_content(...)}'
+        label = ai_label if o["ai"] else human_label
+        total_len += len(label) + 2 # ": "
+        total_len += _calculate_content_length(o["content"], strip_images=strip_images)
+
+    return total_len
+
+
+def _calculate_content_length(content: MessageContent, strip_images: bool = False) -> int:
+    # already a string
+    if isinstance(content, str):
+        return len(content)
+
+    # raw messages return preview or trimmed json
+    if _is_raw_message(content):
+        preview: str = content.get("preview", "") # type: ignore
+        if preview:
+            return len(preview)
+
+        # If strip_images is True and we have no preview, return placeholder
+        if strip_images:
+            return len("[IMAGE]")
+
+        text = _json_dumps(content)
+        if len(text) > RAW_MESSAGE_OUTPUT_TEXT_TRIM:
+            return RAW_MESSAGE_OUTPUT_TEXT_TRIM + 11 # "... TRIMMED" is 11 chars
+        return len(text)
+
+    # Handle list of contents (e.g. multimodal)
+    if isinstance(content, list):
+        if strip_images:
+            length = 0
+            for item in content:
+                length += _calculate_content_length(item, strip_images=True)
+            return length
+
+    # Handle dict-based content with strip_images (e.g. single image dict)
+    if isinstance(content, dict) and strip_images:
+        if content.get("type") == "image_url" or "image" in content or "image_url" in content:
+            return len("[IMAGE]")
+        if content.get("type") == "text":
+            return len(content.get("text", ""))
+
+    # regular messages of non-string are dumped as json
+    return len(_json_dumps(content))
 
 
 def _merge_outputs(a: MessageContent, b: MessageContent) -> MessageContent:
