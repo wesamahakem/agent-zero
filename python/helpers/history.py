@@ -145,6 +145,7 @@ class Topic(Record):
         self.summary: str = ""
         self.messages: list[Message] = []
         self.summary_tokens: int = 0
+        self._messages_tokens: int | None = None
 
     def get_tokens(self):
         if self.summary:
@@ -152,13 +153,17 @@ class Topic(Record):
                 self.summary_tokens = tokens.approximate_tokens(self.summary)
             return self.summary_tokens
         else:
-            return sum(msg.get_tokens() for msg in self.messages)
+            if self._messages_tokens is None:
+                self._messages_tokens = sum(msg.get_tokens() for msg in self.messages)
+            return self._messages_tokens
 
     def add_message(
         self, ai: bool, content: MessageContent, tokens: int = 0
     ) -> Message:
         msg = Message(ai=ai, content=content, tokens=tokens)
         self.messages.append(msg)
+        if self._messages_tokens is not None:
+            self._messages_tokens += msg.get_tokens()
         return msg
 
     def output(self) -> list[OutputMessage]:
@@ -198,6 +203,11 @@ class Topic(Record):
             leng = len(text)
 
             trim_to_chars = leng * (msg_max_size / tok)
+
+            # Update cache before modification
+            if self._messages_tokens is not None:
+                self._messages_tokens -= msg.get_tokens()
+
             # raw messages will be replaced as a whole, they would become invalid when truncated
             if _is_raw_message(out[0]["content"]):
                 msg.set_summary(
@@ -213,6 +223,10 @@ class Topic(Record):
                     trim_to_chars * 0.85,
                 )
                 msg.set_summary(_json_dumps(trunc))
+
+            # Update cache after modification
+            if self._messages_tokens is not None:
+                self._messages_tokens += msg.get_tokens()
 
             return True
         return False
@@ -233,6 +247,12 @@ class Topic(Record):
                 "fw.msg_summary.md", summary=summary
             )
             sum_msg = Message(False, sum_msg_content)
+
+            if self._messages_tokens is not None:
+                removed_tokens = sum(m.get_tokens() for m in msg_to_sum)
+                self._messages_tokens -= removed_tokens
+                self._messages_tokens += sum_msg.get_tokens()
+
             self.messages[1 : cnt_to_sum + 1] = [sum_msg]
             return True
         return False
