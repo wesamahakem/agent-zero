@@ -1,8 +1,8 @@
 from python.helpers.api import ApiHandler, Request, Response
 
-from agent import AgentContext, AgentContextType
+from agent import AgentContext, AgentContextType, EPOCH
 
-from python.helpers.task_scheduler import TaskScheduler
+from python.helpers.task_scheduler import TaskScheduler, serialize_task
 from python.helpers.localization import Localization
 from python.helpers.dotenv import get_dotenv_value
 
@@ -48,7 +48,19 @@ class Poll(ApiHandler):
         tasks = []
         processed_contexts = set()  # Track processed context IDs
 
-        all_ctxs = list(AgentContext._contexts.values())
+        # Optimize: Sort contexts by created_at (datetime) initially to avoid sorting strings later
+        # Also handles None created_at by using EPOCH
+        all_ctxs = sorted(
+            AgentContext._contexts.values(),
+            key=lambda c: c.created_at or EPOCH,
+            reverse=True
+        )
+
+        # Optimize: Fetch all tasks once to build a O(1) lookup map
+        # This avoids O(N*M) complexity where N=contexts and M=tasks
+        all_tasks = list(scheduler.get_tasks())  # Copy list to be safe
+        tasks_by_uuid = {t.uuid: t for t in all_tasks}
+
         # First, identify all tasks
         for ctx in all_ctxs:
             # Skip if already processed
@@ -63,7 +75,9 @@ class Poll(ApiHandler):
             # Create the base context data that will be returned
             context_data = ctx.output()
 
-            context_task = scheduler.get_task_by_uuid(ctx.id)
+            # Optimize: Use the pre-built lookup map instead of searching the list every time
+            context_task = tasks_by_uuid.get(ctx.id)
+
             # Determine if this is a task-dedicated context by checking if a task with this UUID exists
             is_task_context = (
                 context_task is not None and context_task.context_id == ctx.id
@@ -73,7 +87,8 @@ class Poll(ApiHandler):
                 ctxs.append(context_data)
             else:
                 # If this is a task, get task details from the scheduler
-                task_details = scheduler.serialize_task(ctx.id)
+                # Optimize: Use the found task object directly instead of searching again
+                task_details = serialize_task(context_task)
                 if task_details:
                     # Add task details to context_data with the same field names
                     # as used in scheduler endpoints to maintain UI compatibility
@@ -102,10 +117,6 @@ class Poll(ApiHandler):
 
             # Mark as processed
             processed_contexts.add(ctx.id)
-
-        # Sort tasks and chats by their creation date, descending
-        ctxs.sort(key=lambda x: x["created_at"], reverse=True)
-        tasks.sort(key=lambda x: x["created_at"], reverse=True)
 
         # data from this server
         return {
